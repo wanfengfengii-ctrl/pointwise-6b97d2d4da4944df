@@ -3,7 +3,7 @@ import sqlite3
 
 from warehouse.dispatch.status import DispatchStatusStore
 from warehouse.dispatch.tickets import DeliveryTicket, require_warehouse
-from warehouse.posting.admission import Admission, admit_delivery, verify_ticket
+from warehouse.posting.admission import Admission, DeliveryRejected, admit_delivery, verify_ticket
 from warehouse.posting.disposition import PostingObservation
 from warehouse.posting.receipts import Receipt, find_receipt, initialize_receipts, save_receipt
 from warehouse.source.manifest import ManifestStore
@@ -51,6 +51,19 @@ class PostingLedger:
         with self.database.write() as connection:
             receipt = find_receipt(connection, self.warehouse, ticket_id)
             if receipt is None:
+                # Holding the warehouse writer lock, re-read the coordination
+                # status. A handoff that commits the stop first reserves or
+                # supersedes this old ticket; the late write must then be
+                # rejected rather than double-posting the row. A post that
+                # commits first keeps its durable receipt and wins.
+                current = self.status.read_current(row.identity)
+                if current is None or current.ticket != admission.ticket:
+                    raise DeliveryRejected(
+                        f'ticket {ticket_id} stopped before posting')
+                if current.reserved_order is not None:
+                    raise DeliveryRejected(
+                        f'ticket {ticket_id} stopped before posting '
+                        f'by transfer {current.reserved_order!r}')
                 cursor = connection.execute('''
                     INSERT INTO posted_rows (ticket_id, batch_id, row_id, origin, liters)
                     VALUES (?, ?, ?, ?, ?)

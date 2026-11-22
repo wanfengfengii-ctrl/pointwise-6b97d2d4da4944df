@@ -50,12 +50,9 @@ class TransferService:
             tickets = tuple(self.assignments.tickets.get(connection, ticket_id)
                             for ticket_id in order.old_ticket_ids)
 
-            confirmed = {}
-            for ticket in tickets:
-                status = self.assignments.status.get_current(ticket.identity, connection=connection)
-                if status is not None and status.ticket == ticket and status.confirmed_receipt is not None:
-                    confirmed[ticket.ticket_id] = status.confirmed_receipt
-
+        # The durable outcome is the source warehouse's own ledger. Taking the
+        # writer lock there serializes against any in-flight post so the
+        # posting-first / stop-first ordering is decided by commit order.
         observations = probe_old_tickets(self.ledgers[source], tickets)
         with self.database.write() as connection:
             current = self.progress.get_order(connection, order_id)
@@ -66,7 +63,7 @@ class TransferService:
             if observations is None:
                 self.progress.mark_pending(connection, order_id)
                 return TransferResult(order_id, 'pending')
-            retained, movable = classify_transfer_rows(tickets, observations, confirmed)
+            retained, movable = classify_transfer_rows(tickets, observations)
             moved = self.assignments.publish_transfer(connection, order_id, retained, movable,
                                                       destination)
             result = TransferResult(order_id, 'completed', retained, moved)

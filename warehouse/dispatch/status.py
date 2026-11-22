@@ -46,6 +46,15 @@ class DispatchStatusStore:
         ticket = self.tickets.get(connection, record['ticket_id'])
         return AssignmentStatus(ticket, record['confirmed_receipt'], record['reserved_order'])
 
+    def read_current(self, identity: RowIdentity) -> AssignmentStatus | None:
+        """Read the current assignment from the coordination database.
+
+        Used while another database (a warehouse ledger) holds its own writer
+        lock, so the coordination connection is opened independently.
+        """
+        with self.database.read() as reader:
+            return self.get_current(identity, connection=reader)
+
     def list_open_tickets(self, connection: sqlite3.Connection, batch_id: str,
                           warehouse: str) -> tuple[int, ...]:
         records = connection.execute('''
