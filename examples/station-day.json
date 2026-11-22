@@ -1,0 +1,10 @@
+{
+  "batch_id": "qt-2026-05-12",
+  "station": "青汀一站",
+  "day": "2026-05-12",
+  "rows": [
+    {"row_id": "A", "origin": "北堤抄表单/01", "liters": 7},
+    {"row_id": "B", "origin": "南门抄表单/02", "liters": 11},
+    {"row_id": "C", "origin": "巡测抄表单/03", "liters": 0}
+  ]
+}
